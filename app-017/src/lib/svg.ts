@@ -41,6 +41,11 @@ function cellDotsSVG(cell: BrailleCell, x: number, y: number, p: PrinterParams):
 export function pageToSVG(page: LayoutPage, setup: PageSetup, printer: PrinterParams, opts: PageSVGOptions = {}): string {
   const w = printer.paperWidthMm;
   const h = printer.paperHeightMm;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}" class="braille-page">${pageBodySVG(page, setup, printer, opts)}</svg>`;
+}
+
+/** 单页凸点正文（不含 svg 外壳），供单页/长图复用，保证两种导出内容完全一致 */
+function pageBodySVG(page: LayoutPage, setup: PageSetup, printer: PrinterParams, opts: PageSVGOptions = {}): string {
   const parts: string[] = [];
   page.lines.forEach((line, li) => {
     line.cells.forEach((cell, ci) => {
@@ -50,8 +55,56 @@ export function pageToSVG(page: LayoutPage, setup: PageSetup, printer: PrinterPa
       parts.push(`<g${cell.uncertain && opts.markUncertain ? ' class="uncertain"' : ''}>${cellDotsSVG(cell, x, y, printer)}</g>`);
     });
   });
-  const body = parts.join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}" class="braille-page">${body}</svg>`;
+  return parts.join('');
+}
+
+/**
+ * 多页 → 单个 SVG 长图：所有页按页序竖向拼接（页间不留缝，可连续向下翻看）。
+ * 与单页导出共用同一套坐标计算，内容确定、重复导出字节一致。
+ */
+export function pagesToLongSVG(pages: LayoutPage[], setup: PageSetup, printer: PrinterParams): string {
+  if (pages.length === 0) throw new Error('没有可导出的页面');
+  const w = printer.paperWidthMm;
+  const h = printer.paperHeightMm;
+  const bodies = pages
+    .map((p, i) => `<g transform="translate(0,${(i * h).toFixed(3)})">${pageBodySVG(p, setup, printer)}</g>`)
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${(h * pages.length).toFixed(3)}mm" viewBox="0 0 ${w} ${(h * pages.length).toFixed(3)}">${bodies}</svg>`;
+}
+
+/** 长 SVG 的 UTF-8 字节数（导出前展示确切体积） */
+export function longSVGByteLength(pages: LayoutPage[], setup: PageSetup, printer: PrinterParams): number {
+  return new TextEncoder().encode(pagesToLongSVG(pages, setup, printer)).length;
+}
+
+export interface SVGBuildProgress {
+  onProgress?: (pagesDone: number, totalPages: number) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * 逐页拼装单个 SVG 长图：页间让出主线程并回报进度，支持中止。
+ * 中止/失败时 reject，不会触发下载。
+ */
+export async function pagesToLongSVGString(
+  pages: LayoutPage[],
+  setup: PageSetup,
+  printer: PrinterParams,
+  prog: SVGBuildProgress = {},
+): Promise<string> {
+  if (pages.length === 0) throw new Error('没有可导出的页面');
+  prog.signal?.throwIfAborted();
+  const w = printer.paperWidthMm;
+  const h = printer.paperHeightMm;
+  const parts: string[] = [];
+  for (let i = 0; i < pages.length; i++) {
+    prog.signal?.throwIfAborted();
+    parts.push(`<g transform="translate(0,${(i * h).toFixed(3)})">${pageBodySVG(pages[i], setup, printer)}</g>`);
+    prog.onProgress?.(i + 1, pages.length);
+    // 让出主线程，使进度条可刷新、中止可响应
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${(h * pages.length).toFixed(3)}mm" viewBox="0 0 ${w} ${(h * pages.length).toFixed(3)}">${parts.join('')}</svg>`;
 }
 
 /**
@@ -102,9 +155,4 @@ export function calibrationSVG(printer: PrinterParams, setup: PageSetup): string
   );
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">${parts.join('')}</svg>`;
-}
-
-/** 多页 → 单个多页 SVG（每页一图，供下载合并文件用） */
-export function documentToSVGs(pages: LayoutPage[], setup: PageSetup, printer: PrinterParams): string[] {
-  return pages.map((p) => pageToSVG(p, setup, printer));
 }

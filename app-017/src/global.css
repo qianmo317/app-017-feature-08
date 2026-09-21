@@ -176,6 +176,15 @@ html.high-contrast .cell-btn.selected { background: rgba(255, 212, 0, 0.25); }
 .print-page-wrap svg { display: block; width: 100%; height: auto; }
 .calibration-note { background: var(--warn-bg); color: var(--warn-ink); padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; }
 
+/* ---------- 点阵图合并导出 ---------- */
+.export-panel { background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; }
+.export-panel p { margin: 0 0 10px; }
+.export-progress { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; height: 18px; overflow: hidden; margin-bottom: 8px; }
+.export-progress-bar { background: var(--accent); height: 100%; transition: width 0.15s ease; }
+.export-ok { color: var(--accent); }
+.export-err { color: var(--danger); }
+.export-muted { color: var(--muted); }
+
 @media print {
   .topnav, .footer, .print-toolbar, .no-print, .skip-link { display: none !important; }
   main { padding: 0; max-width: none; }

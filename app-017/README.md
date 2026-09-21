@@ -15,7 +15,7 @@
 | 自定义读音 | 词语表（优先于单字读音，如 `长城 chang2 cheng2`）与逐方指定读音 |
 | 分页排版 | 每行 32 方、每页 25 行；段首缩进 2 方；**词不跨行**、标点不落行首；页码右对齐独占首行；超长词强制拆分并生成违规报告 |
 | 声调省写 | 实现 GF 0019-2018 §10.2 全部省写规则（10.2.1–10.2.7），支持「全部标调 / 省写（默认）/ 全部省略」三种模式 |
-| 打印导出 | SVG 点阵图（mm 精度）、300 DPI PNG、BRF 盲文文件（含结构校验）；附可选打印校准页 |
+| 打印导出 | **单个多页 PDF**（矢量凸点、可连续翻页）、**单张长 PNG/SVG**（全部页竖向拼接，300 DPI PNG 不受浏览器画布面积限制）、BRF 盲文文件（含结构校验）；导出前预告页数与文件大小，带进度可中止，任一页失败整份作废；附可选打印校准页 |
 | 反向转换 | 点字 → 汉语（用于核对转换正确性） |
 | 无障碍 | 全键盘操作（Ctrl+Enter 转换）、aria-live 播报、跳转链接、高对比度模式、字号缩放 |
 | 持久化 | 文档存 IndexedDB（`braille-studio`/`docs`），应用设置存 localStorage（`app-017:settings`），刷新后全部保留 |
@@ -40,14 +40,14 @@ npm run preview    # 本地预览生产构建
 ## 测试
 
 ```bash
-npm test           # 单元测试（vitest）：转换/换行/BRF 校验/性能，280 条
+npm test           # 单元测试（vitest）：转换/换行/BRF 校验/合并导出/性能
 npm run test:watch # 监听模式
-npm run e2e        # Playwright e2e：9 条用例，自动 build + preview（独占端口 4317）
+npm run e2e        # Playwright e2e：13 条用例，自动 build + preview（独占端口 4317）
 E2E_BASE_URL=http://localhost:8097 npm run e2e   # e2e 直接打容器，验证生产镜像
 ```
 
-- 单元测试覆盖：200+ 条转换用例、30 组换行/分页用例、BRF 结构校验、1 万字 < 300ms 性能
-- e2e 覆盖：全流程（输入→转换→多音字确认→导出解锁→BRF 下载）、键盘流、刷新持久化、逐方编辑、违规报告、100+ 页长文滚动、模板、词语表、设置持久化
+- 单元测试覆盖：200+ 条转换用例、30 组换行/分页用例、BRF 结构校验、多页 PDF/长 PNG/长 SVG 导出（结构、确定性、中止作废）、1 万字 < 300ms 性能
+- e2e 覆盖：全流程（输入→转换→多音字确认→导出解锁→BRF 下载）、键盘流、刷新持久化、逐方编辑、违规报告、100+ 页长文滚动、模板、词语表、设置持久化、合并导出（页数/大小预告、单文件 PDF/PNG、进度与中止、重复导出字节一致）
 
 ## Docker 部署
 
@@ -73,7 +73,11 @@ curl http://localhost:8097/healthz   # → ok
 │   │   ├── convert.ts              #   点字转换（声调省写、多音字、overrides/confirmed）
 │   │   ├── layout.ts               #   分页排版（词不跨行、缩进、页码、违规报告）
 │   │   ├── brf.ts                  #   BRF 导出与结构校验（页终止符 \f\n）
-│   │   ├── svg.ts / png.ts         #   打印点阵图 / 300 DPI 位图 / 校准页
+│   │   ├── svg.ts                  #   打印点阵图 / 单文件长 SVG / 校准页
+│   │   ├── pdf.ts                  #   多页矢量 PDF（零依赖，确定性输出）
+│   │   ├── long-png.ts             #   逐页栅格化 → 长 PNG
+│   │   ├── png-encode.ts           #   流式灰度 PNG 编码器（绕开画布面积上限）
+│   │   ├── png.ts / deflate.ts     #   下载与文件名 / zlib（CompressionStream）
 │   │   ├── reverse.ts              #   反向转换（点字 → 汉语）
 │   │   ├── settings.ts             #   设置（localStorage，app-017:settings）
 │   │   └── storage.ts              #   文档存储（IndexedDB）
