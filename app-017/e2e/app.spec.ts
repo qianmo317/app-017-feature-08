@@ -99,6 +99,94 @@ test.describe('全流程', () => {
     await textarea.fill('A'.repeat(40));
     await expect(page.getByRole('alert')).toContainText('超过行宽');
   });
+
+  test('合并导出：确认页数与大小 → 单个多页 PDF 下载（重复导出字节一致）', async ({ page }) => {
+    await createDoc(page);
+    const textarea = page.getByLabel('原文输入区');
+    // 足够长以产生多页
+    await textarea.fill('盲文排版是把文字转成凸点符号的过程，特殊教育学校需要大量点字教材。'.repeat(20));
+    await page.getByRole('button', { name: '全部按默认读音确认' }).click();
+    await page.getByRole('button', { name: '打印与导出 →' }).click();
+    await expect(page).toHaveURL(/\/print$/);
+
+    await page.getByRole('button', { name: /导出 PDF/ }).click();
+    const dialog = page.getByRole('dialog', { name: '导出点阵图' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/将导出\s*\d+\s*页/)).toBeVisible();
+    await expect(dialog.getByText(/预估大小/)).toBeVisible();
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      dialog.getByRole('button', { name: '开始导出' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+    await expect(dialog.getByText(/导出完成/)).toBeVisible();
+    const content = fs.readFileSync(await download.path());
+    expect(content.subarray(0, 5).toString()).toBe('%PDF-');
+    // 页数与完成提示一致
+    const dialogText = (await dialog.textContent()) ?? '';
+    const declaredPages = parseInt(dialogText.match(/导出完成：(\d+) 页/)![1], 10);
+    expect(content.toString('latin1').match(/\/Type\/Page(?![s])/g)).toHaveLength(declaredPages);
+
+    // 同一份文档重复导出：字节完全一致
+    await dialog.getByRole('button', { name: '关闭' }).click();
+    await page.getByRole('button', { name: /导出 PDF/ }).click();
+    const [download2] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('dialog', { name: '导出点阵图' }).getByRole('button', { name: '开始导出' }).click(),
+    ]);
+    const content2 = fs.readFileSync(await download2.path());
+    expect(content2).toEqual(content);
+  });
+
+  test('合并导出：PNG 长图为单个文件，中途停止不落任何文件', async ({ page }) => {
+    test.setTimeout(180_000);
+    await createDoc(page);
+    const textarea = page.getByLabel('原文输入区');
+    await textarea.fill('盲文排版是把文字转成凸点符号的过程，特殊教育学校需要大量点字教材。'.repeat(500));
+    await page.getByRole('button', { name: '全部按默认读音确认' }).click();
+    await page.getByRole('button', { name: '打印与导出 →' }).click();
+
+    let downloaded = false;
+    page.on('download', () => {
+      downloaded = true;
+    });
+
+    await page.getByRole('button', { name: /导出 PNG/ }).click();
+    const dialog = page.getByRole('dialog', { name: '导出点阵图' });
+    await dialog.getByRole('button', { name: '开始导出' }).click();
+    // 数十页 300DPI 渲染需要时间，进度条出现后立即停止
+    await expect(dialog.locator('progress')).toBeVisible();
+    await dialog.getByRole('button', { name: '停止' }).click();
+    await expect(dialog.getByText(/已停止，未生成任何文件/)).toBeVisible();
+    // 给下载事件留出触发窗口
+    await page.waitForTimeout(1000);
+    expect(downloaded).toBe(false);
+  });
+
+  test('合并导出：PNG 长图单文件宽度=A4 300DPI、高度=页数×页高', async ({ page }) => {
+    await createDoc(page);
+    const textarea = page.getByLabel('原文输入区');
+    await textarea.fill('盲文排版是把文字转成凸点符号的过程，特殊教育学校需要大量点字教材。'.repeat(20));
+    await page.getByRole('button', { name: '全部按默认读音确认' }).click();
+    await page.getByRole('button', { name: '打印与导出 →' }).click();
+
+    await page.getByRole('button', { name: /导出 PNG/ }).click();
+    const dialog = page.getByRole('dialog', { name: '导出点阵图' });
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      dialog.getByRole('button', { name: '开始导出' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/\.png$/);
+    const path = await download.path();
+    const content = fs.readFileSync(path!);
+    // PNG 签名 + IHDR 宽高（大端，偏移 16/20）
+    expect(content.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    expect(content.readUInt32BE(16)).toBe(2480); // 210mm @ 300DPI
+    const declaredPages = parseInt(((await dialog.textContent()) ?? '').match(/导出完成：(\d+) 页/)![1], 10);
+    expect(content.readUInt32BE(20)).toBe(3508 * declaredPages);
+    await expect(dialog.getByText(/导出完成/)).toBeVisible();
+  });
 });
 
 test.describe('长文与滚动', () => {

@@ -103,8 +103,3 @@ export function calibrationSVG(printer: PrinterParams, setup: PageSetup): string
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">${parts.join('')}</svg>`;
 }
-
-/** 多页 → 单个多页 SVG（每页一图，供下载合并文件用） */
-export function documentToSVGs(pages: LayoutPage[], setup: PageSetup, printer: PrinterParams): string[] {
-  return pages.map((p) => pageToSVG(p, setup, printer));
-}

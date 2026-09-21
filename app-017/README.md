@@ -15,7 +15,7 @@
 | 自定义读音 | 词语表（优先于单字读音，如 `长城 chang2 cheng2`）与逐方指定读音 |
 | 分页排版 | 每行 32 方、每页 25 行；段首缩进 2 方；**词不跨行**、标点不落行首；页码右对齐独占首行；超长词强制拆分并生成违规报告 |
 | 声调省写 | 实现 GF 0019-2018 §10.2 全部省写规则（10.2.1–10.2.7），支持「全部标调 / 省写（默认）/ 全部省略」三种模式 |
-| 打印导出 | SVG 点阵图（mm 精度）、300 DPI PNG、BRF 盲文文件（含结构校验）；附可选打印校准页 |
+| 打印导出 | 全部页合并为单个文件：矢量多页 PDF（可连续翻页）、300 DPI 竖拼长 PNG；BRF 盲文文件（含结构校验）；附可选打印校准页。导出前告知页数与预估大小，导出有进度、可停止，任一页失败整份作废，重复导出字节一致 |
 | 反向转换 | 点字 → 汉语（用于核对转换正确性） |
 | 无障碍 | 全键盘操作（Ctrl+Enter 转换）、aria-live 播报、跳转链接、高对比度模式、字号缩放 |
 | 持久化 | 文档存 IndexedDB（`braille-studio`/`docs`），应用设置存 localStorage（`app-017:settings`），刷新后全部保留 |
@@ -40,14 +40,14 @@ npm run preview    # 本地预览生产构建
 ## 测试
 
 ```bash
-npm test           # 单元测试（vitest）：转换/换行/BRF 校验/性能，280 条
+npm test           # 单元测试（vitest）：转换/换行/BRF 校验/性能/合并导出文件，294 条
 npm run test:watch # 监听模式
-npm run e2e        # Playwright e2e：9 条用例，自动 build + preview（独占端口 4317）
+npm run e2e        # Playwright e2e：12 条用例，自动 build + preview（独占端口 4317）
 E2E_BASE_URL=http://localhost:8097 npm run e2e   # e2e 直接打容器，验证生产镜像
 ```
 
-- 单元测试覆盖：200+ 条转换用例、30 组换行/分页用例、BRF 结构校验、1 万字 < 300ms 性能
-- e2e 覆盖：全流程（输入→转换→多音字确认→导出解锁→BRF 下载）、键盘流、刷新持久化、逐方编辑、违规报告、100+ 页长文滚动、模板、词语表、设置持久化
+- 单元测试覆盖：200+ 条转换用例、30 组换行/分页用例、BRF 结构校验、1 万字 < 300ms 性能、合并 PDF/PNG 的字节结构（页序、zlib 解压、CRC、确定性、缺页/取消即作废）
+- e2e 覆盖：全流程（输入→转换→多音字确认→导出解锁→BRF 下载）、键盘流、刷新持久化、逐方编辑、违规报告、100+ 页长文滚动、模板、词语表、设置持久化、合并 PDF/PNG 导出（单文件、页数/尺寸、字节可复现、中途停止不落文件）
 
 ## Docker 部署
 
@@ -73,7 +73,7 @@ curl http://localhost:8097/healthz   # → ok
 │   │   ├── convert.ts              #   点字转换（声调省写、多音字、overrides/confirmed）
 │   │   ├── layout.ts               #   分页排版（词不跨行、缩进、页码、违规报告）
 │   │   ├── brf.ts                  #   BRF 导出与结构校验（页终止符 \f\n）
-│   │   ├── svg.ts / png.ts         #   打印点阵图 / 300 DPI 位图 / 校准页
+│   │   ├── svg.ts / png.ts / pdf.ts    #   打印点阵图 / 300 DPI 竖拼长 PNG / 矢量多页 PDF / 校准页
 │   │   ├── reverse.ts              #   反向转换（点字 → 汉语）
 │   │   ├── settings.ts             #   设置（localStorage，app-017:settings）
 │   │   └── storage.ts              #   文档存储（IndexedDB）
